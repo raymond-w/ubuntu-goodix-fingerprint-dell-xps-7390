@@ -191,6 +191,11 @@ EOF
 done
 
 # --- build the deb -----------------------------------------------------------
+# Normalise permissions: the build user's umask (often 002) would otherwise
+# leave directories and files group-writable in the package.
+find "$ROOT" -type d -exec chmod 755 {} +
+find "$ROOT" -type f ! -perm /111 -exec chmod 644 {} +
+
 mkdir -p "$OUT_DIR"
 log "Building $DEB_FILE"
 dpkg-deb --root-owner-group --build "$ROOT" "$OUT_DIR/$DEB_FILE" >/dev/null
