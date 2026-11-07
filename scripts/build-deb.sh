@@ -14,14 +14,14 @@
 #
 # Usage:
 #   ./scripts/build-deb.sh
-#   REVISION=2 ./scripts/build-deb.sh
+#   REVISION=3 ./scripts/build-deb.sh
 #   SRC_DIR=/path/to/libfprint-source ./scripts/build-deb.sh
 #
 # Environment variables (all optional):
 #   SRC_DIR     libfprint source tree   (default: <repo>/work/libfprint-*)
 #   BUILD_DIR   meson build directory   (default: $SRC_DIR/build-goodix)
 #   OUT_DIR     where the .deb is put   (default: <repo>/out)
-#   REVISION    packaging revision      (default: 1)
+#   REVISION    packaging revision      (default: 2)
 #   PREFIX      install prefix          (default: /opt/libfprint-goodix)
 #   RECONFIGURE set to 1 to wipe and reconfigure the meson build dir
 
@@ -32,7 +32,7 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 PKG_NAME="libfprint-goodix53x5-opt"
 PREFIX="${PREFIX:-/opt/libfprint-goodix}"
-REVISION="${REVISION:-1}"
+REVISION="${REVISION:-2}"   # bump when the package contents change
 OUT_DIR="${OUT_DIR:-$REPO_ROOT/out}"
 RECONFIGURE="${RECONFIGURE:-0}"
 
@@ -59,6 +59,9 @@ grep -q "goodix53x5" "$SRC_DIR/meson.build" \
     || die "goodix53x5 is not in $SRC_DIR/meson.build (run ./scripts/prepare-source.sh first)"
 [[ -f "$SRC_DIR/libfprint/drivers/goodix53x5/goodix53x5.c" ]] \
     || die "driver sources missing from $SRC_DIR/libfprint/drivers/goodix53x5/"
+
+HOOK_SRC="$REPO_ROOT/packaging/system-sleep/fprint-reset"
+[[ -f "$HOOK_SRC" ]] || die "missing resume hook: $HOOK_SRC"
 
 ARCH="$(dpkg --print-architecture)"
 MULTIARCH="$(dpkg-architecture -qDEB_HOST_MULTIARCH)"
@@ -150,6 +153,9 @@ cat > "$ROOT/usr/lib/systemd/system/fprintd.service.d/goodix53x5.conf" <<EOF
 Environment=LD_LIBRARY_PATH=$PREFIX/$LIBDIR_REL
 EOF
 
+# Resume hook: resets the sensor after suspend (see docs/SUSPEND-RESUME.md)
+install -D -m 755 "$HOOK_SRC" "$ROOT/usr/lib/systemd/system-sleep/fprint-reset"
+
 cat > "$ROOT/usr/share/doc/$PKG_NAME/copyright" <<'EOF'
 libfprint: LGPL-2.1-or-later (https://gitlab.freedesktop.org/libfprint/libfprint)
 Goodix HTK32 driver: https://github.com/AndyHazz/goodix53x5-libfprint (LGPL-2.1-or-later)
@@ -163,13 +169,14 @@ Version: $DEB_VER
 Architecture: $ARCH
 Maintainer: ${USER:-local} <${USER:-local}@$(hostname)>
 Installed-Size: $INSTALLED_SIZE
-Depends: fprintd, $SHLIBDEPS
+Depends: fprintd, usbutils, $SHLIBDEPS
 Section: libs
 Priority: optional
 Description: libfprint with Goodix HTK32 (27c6:5385) driver, installed in /opt
  Local build of Ubuntu's libfprint $UPSTREAM_VER plus the third-party
  goodix53x5 driver. Installed under $PREFIX and activated for fprintd
- through a systemd drop-in. Does not replace the system libfprint.
+ through a systemd drop-in. Also installs a systemd sleep hook that resets
+ the sensor after resume. Does not replace the system libfprint.
 EOF
 
 for script in postinst postrm; do
@@ -197,5 +204,7 @@ echo
 log "Done: $OUT_DIR/$DEB_FILE"
 echo "Install:  sudo apt install '$OUT_DIR/$DEB_FILE'"
 echo "Remove:   sudo apt remove $PKG_NAME"
-echo "(If you installed to $PREFIX by hand earlier, run:"
-echo "   sudo systemctl revert fprintd && sudo rm -rf $PREFIX   first)"
+echo "(If you installed to $PREFIX by hand earlier, run first:"
+echo "   sudo systemctl revert fprintd && sudo rm -rf $PREFIX"
+echo " If you installed a resume hook by hand, also run first:"
+echo "   sudo rm -f /usr/lib/systemd/system-sleep/fprint-reset)"

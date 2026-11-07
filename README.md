@@ -36,12 +36,14 @@ Tested by the author on:
 |---|---|
 | Distribution | Ubuntu 26.10 ("stonking") |
 | libfprint | `1:1.95.2+tod1-1ubuntu2` (Ubuntu's source package) |
+| Kernel | `7.3.0-070300rc3-generic` (a mainline release candidate) |
 | Sensor | `27c6:5385` |
 | Sensor detected by fprintd | works |
 | Enrollment (`fprintd-enroll`) | works (8 stages complete) |
-| Verification (`fprintd-verify`) | *not yet confirmed here, update before publishing* |
-| Login / `sudo` via PAM | *not yet confirmed here, update before publishing* |
-| Suspend / resume | *not yet confirmed here, update before publishing* |
+| Verification (`fprintd-verify`) | works |
+| Fingerprint login at the GDM screen | works |
+| After suspend/resume | works **with the resume hook** the package installs; without it, the first logins after resume fail (see [docs/SUSPEND-RESUME.md](docs/SUSPEND-RESUME.md)) |
+| `sudo` via PAM | not confirmed |
 
 The driver also lists `27c6:5335` and `27c6:5395`. Those are untested with these
 scripts.
@@ -72,6 +74,10 @@ Other libfprint versions may need manual meson edits; see
   sets `LD_LIBRARY_PATH` so that `fprintd` loads that copy.
 - The driver detaches the kernel's `cdc_acm` driver from the sensor itself when
   it opens the device, so no udev rule is needed.
+- A systemd sleep hook (`/usr/lib/systemd/system-sleep/fprint-reset`) stops
+  fprintd and resets the sensor with `usbreset` after every resume. Without it,
+  fingerprint login at the GDM screen failed after suspend. See
+  [docs/SUSPEND-RESUME.md](docs/SUSPEND-RESUME.md).
 - Removing the package restores stock behaviour.
 
 ## Quick start
@@ -102,7 +108,7 @@ later reports a missing header or tool, install the matching `-dev` package.
 ```bash
 git clone <this-repository-url> goodix-htk32-ubuntu
 cd goodix-htk32-ubuntu
-bash scripts/prepare-source.sh
+./scripts/prepare-source.sh
 ```
 
 This clones the driver into `work/`, runs `apt source libfprint`, copies the
@@ -112,7 +118,7 @@ commit that was used is recorded in `work/DRIVER_COMMIT`.
 ### 4. Build the package
 
 ```bash
-bash scripts/build-deb.sh
+./scripts/build-deb.sh
 ```
 
 Compiler warnings from OpenCV headers are normal. The result is written to
@@ -150,7 +156,8 @@ Your password continues to work as a fallback.
 sudo apt remove libfprint-goodix53x5-opt
 ```
 
-fprintd goes back to Ubuntu's libfprint. Enrolled prints stay in
+fprintd goes back to Ubuntu's libfprint, and the resume hook is removed with
+the package. Enrolled prints stay in
 `/var/lib/fprint/<user>/goodix53x5/`; delete them with `fprintd-delete "$USER"`
 or by removing that directory.
 
@@ -161,8 +168,8 @@ updates `libfprint` or `fprintd` and fingerprint stops working, rebuild:
 
 ```bash
 rm -rf work/libfprint-*                 # keep work/goodix53x5-libfprint
-bash scripts/prepare-source.sh
-REVISION=2 bash scripts/build-deb.sh       # package version follows the source
+./scripts/prepare-source.sh
+REVISION=3 ./scripts/build-deb.sh       # bump when contents change; version follows the source
 sudo apt install ./out/libfprint-goodix53x5-opt_*.deb
 ```
 
@@ -188,7 +195,7 @@ it could not find. Add these by hand:
   daemon that handles biometric authentication. The driver is young and has
   little review. Read the source (`work/goodix53x5-libfprint/`) before
   installing, and consider pinning a commit you have reviewed with
-  `DRIVER_REF=<commit> bash scripts/prepare-source.sh`.
+  `DRIVER_REF=<commit> ./scripts/prepare-source.sh`.
 - Keep password login working. Don't remove it because fingerprint works.
 - Fingerprints are not secrets; a fingerprint login is a convenience, not
   strong authentication. Think twice before enabling it for `sudo` on a
@@ -202,7 +209,10 @@ it could not find. Add these by hand:
 scripts/prepare-source.sh      fetch Ubuntu's libfprint source + driver, integrate them
 scripts/apply-meson-edits.py   the two meson edits the driver's patch can't apply on 1.95.x
 scripts/build-deb.sh           build and package, producing out/*.deb
+packaging/system-sleep/fprint-reset   resume hook installed by the deb
 docs/TROUBLESHOOTING.md        common problems
+docs/SUSPEND-RESUME.md         fingerprint failing after suspend, and the hook that fixes it
+CHANGELOG.md                   package version history
 work/                          (generated) sources and driver checkout
 out/                           (generated) the .deb
 ```
@@ -227,4 +237,3 @@ belong in the
 
 LGPL-2.1-or-later, matching libfprint and the driver; see [LICENSE](LICENSE).
 The driver and libfprint are separate projects under their own licenses.
-# ubuntu-goodix-fingerprint-dell-xps-7390

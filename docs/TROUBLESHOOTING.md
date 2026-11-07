@@ -14,12 +14,12 @@ The script checks that the driver is wired into both `meson.build` files. The
 message names the missing piece. Usually the libfprint version differs from
 `1.95.2+tod1` and `apply-meson-edits.py` could not find its anchor lines. Make
 the two edits by hand as described in the README ("Other libfprint versions"),
-then run `bash scripts/build-deb.sh`.
+then run `./scripts/build-deb.sh`.
 
 ### `meson setup` complains about a missing dependency
 
 Install the matching `-dev` package and run the build again with
-`RECONFIGURE=1 bash scripts/build-deb.sh`. Common ones: `libopencv-dev`,
+`RECONFIGURE=1 ./scripts/build-deb.sh`. Common ones: `libopencv-dev`,
 `libssl-dev`, `libnss3-dev`, `libgusb-dev`, `libgudev-1.0-dev`,
 `libpixman-1-dev`, `libcairo2-dev`, `gobject-introspection`.
 `sudo apt build-dep libfprint-2-2` pulls in most of them.
@@ -97,9 +97,20 @@ echo '1-10:1.1' | sudo tee /sys/bus/usb/drivers/cdc_acm/unbind
 
 ### Stops working after suspend/resume
 
-The driver reinitialises the device after sleep. If verification fails after
-resume, capture the log (below) and open an issue with it. Restarting the
-daemon may help in the meantime: `sudo systemctl restart fprintd`.
+Typical signs: fingerprint fails at the GDM screen after a suspend while the
+password works, and `fprintd-verify` fixes it temporarily. The journal shows
+"Open FDT baseline did not stabilize" and "Device was already claimed".
+
+The package installs a resume hook that resets the sensor. Check it is there:
+
+```bash
+ls -l /usr/lib/systemd/system-sleep/fprint-reset     # should be -rwxr-xr-x
+command -v usbreset                                  # from the usbutils package
+```
+
+Details, manual installation without the deb, and what is still untested are
+in [SUSPEND-RESUME.md](SUSPEND-RESUME.md). If it still fails with the hook in
+place, capture the logs described there and open an issue.
 
 ### Debug logging
 

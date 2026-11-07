@@ -1,0 +1,17 @@
+#!/bin/sh
+# Reset the Goodix HTK32 fingerprint reader (27c6:5385) after resume.
+#
+# Without this, after a suspend fprintd can fail with
+#   "Open FDT baseline did not stabilize"
+# and the GDM login screen then reports "Device was already claimed",
+# so fingerprint login fails until something reopens the device cleanly.
+#
+# Installed by the libfprint-goodix53x5-opt package to
+# /usr/lib/systemd/system-sleep/fprint-reset (mode 755).
+# Requires usbreset (package: usbutils).
+case "$1" in
+  post)
+    systemctl stop fprintd.service
+    usbreset 27c6:5385
+    ;;
+esac
